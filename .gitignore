@@ -1,0 +1,20 @@
+# 1. 个人本地编辑器与笔记库配置
+.vscode/
+.idea/
+.obsidian/
+.DS_Store
+
+# 2. 前端常见编译产物与依赖
+node_modules/
+dist/
+*.apk
+
+# 3. 后端常见编译产物与依赖
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.log
+
+# 4. 本地敏感配置文件
+.env
