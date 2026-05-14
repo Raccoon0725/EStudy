@@ -1,0 +1,16 @@
+# 环境变量 (含 API 密钥，严禁提交)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# 工作区临时文件
+Agent/workspace/uploads/*
+Agent/workspace/.agent/*
+!Agent/workspace/.gitkeep
