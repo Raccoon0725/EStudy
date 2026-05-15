@@ -17,7 +17,7 @@ import java.util.UUID;
 @RequestMapping("/api")
 public class FileUploadController {
 
-    // 自动读取 application.properties 里的上传路径
+    //自动读取 application.properties 里的上传路径
     @Value("${file.upload-path}")
     private String uploadDir;
 

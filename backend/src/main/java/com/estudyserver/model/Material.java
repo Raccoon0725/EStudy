@@ -15,7 +15,7 @@ public class Material {
     @Column(name = "user_id")
     private Long userId;
 
-    @Column(name = "file_name")
+    @Column(name = "filename")
     private String fileName;
 
     @Column(name = "file_path", length = 500)
@@ -23,6 +23,6 @@ public class Material {
 
     private String category; // 比如：高等数学/多元函数
 
-    @Column(name = "upload_at", insertable = false, updatable = false)
+    @Column(name = "uploaded_at", insertable = false, updatable = false)
     private LocalDateTime uploadAt;
 }

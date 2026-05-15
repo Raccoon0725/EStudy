@@ -26,7 +26,6 @@ public class StudyQuestController {
     public StudyQuestResponse handleRequest(@RequestBody StudyQuestRequest request) {
 
         //真实代码
-        /*
         try {
             //呼叫Flask端的Agent
             RestTemplate restTemplate = new RestTemplate();
@@ -38,6 +37,13 @@ public class StudyQuestController {
             //如果Agent成功规划了关卡，把它存入MySQL
             if (flaskResponse != null && flaskResponse.isSuccess()) {
                 Map<String, Object> data = (Map<String, Object>) flaskResponse.getData();
+
+                if (data == null) {
+                    flaskResponse.setSuccess(false);
+                    flaskResponse.setMessage("AI助手未能在资料库中找到相关内容，请尝试重新上传或更换提问方式");
+                    return flaskResponse; //提前返回，不再往下走逻辑
+                }
+
                 String rt = flaskResponse.getRequest_type();
 
                 if ("plan".equals(rt)) {
@@ -45,8 +51,9 @@ public class StudyQuestController {
                     String sessionId = (String) data.get("session_id");
                     Session session = new Session();
                     session.setId(sessionId);
-                    //真实环境这里要动态读取用户ID，确保不报外键错误
-                    session.setUserId(Long.valueOf(request.getUser_id()));
+
+                    //去掉了 Long.valueOf()，直接传 String
+                    session.setUserId(request.getUser_id());
                     session.setGoalText(request.getGoal_text());
                     sessionRepository.save(session);
 
@@ -68,7 +75,8 @@ public class StudyQuestController {
                 //如果是答疑请求，把回答存入qa_logs
                 else if ("qa".equals(rt)) {
                     QaLog log = new QaLog();
-                    log.setUserId(Long.valueOf(request.getUser_id()));
+                    //去掉了 Long.valueOf()，直接传 String
+                    log.setUserId(request.getUser_id());
                     log.setQuestion(request.getQuestion());
                     log.setAnswer((String) data.get("answer"));
                     log.setMode((String) data.get("answer_mode"));
@@ -86,25 +94,28 @@ public class StudyQuestController {
             errorResponse.setMessage("呼叫Flask Agent失败，请检查Python服务是否启动: " + e.getMessage());
             return errorResponse;
         }
-        */
-
-        //测试
-        String type = request.getRequest_type();
-        if ("plan".equals(type)) {
-            return mockPlanResponse(request);
-        } else if ("chat".equals(type)) {
-            return mockChatResponse(request);
-        } else if ("qa".equals(type)) {
-            return mockQaResponse(request);
-        } else if ("review".equals(type)) {
-            return mockReviewResponse(request);
-        }
-
-        StudyQuestResponse response = new StudyQuestResponse();
-        response.setSuccess(false);
-        response.setMessage("暂不支持的请求类型: " + type);
-        return response;
     }
+
+    /* =========================================================
+       下面是测试用的 Mock 代码，现已全部封印在注释中
+       ========================================================= */
+    /*
+    //测试
+    String type = request.getRequest_type();
+    if ("plan".equals(type)) {
+        return mockPlanResponse(request);
+    } else if ("chat".equals(type)) {
+        return mockChatResponse(request);
+    } else if ("qa".equals(type)) {
+        return mockQaResponse(request);
+    } else if ("review".equals(type)) {
+        return mockReviewResponse(request);
+    }
+
+    StudyQuestResponse response = new StudyQuestResponse();
+    response.setSuccess(false);
+    response.setMessage("暂不支持的请求类型: " + type);
+    return response;
 
     //Mock
     private StudyQuestResponse mockPlanResponse(StudyQuestRequest req) {
@@ -192,4 +203,5 @@ public class StudyQuestController {
         res.setData(data);
         return res;
     }
+    */
 }
