@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import ensure_directories
-from database.connection import ensure_database, ensure_tables
+from database.connection import ensure_database, run_migrations
 from schemas import StudyQuestRequest, RequestType, AnswerMode
 from graph.state import build_state_from_request
 from graph.workflow import get_graph
@@ -35,7 +35,7 @@ def init_system():
     ensure_directories()
     try:
         ensure_database()
-        ensure_tables()
+        run_migrations()
     except Exception as e:
         logger.warning(f"MySQL 初始化失败: {e}")
     # 预热 LangGraph

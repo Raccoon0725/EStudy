@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from config import FLASK_HOST, FLASK_PORT, FLASK_DEBUG, ensure_directories
-from database.connection import ensure_database, ensure_tables
+from database.connection import ensure_database, run_migrations
 from schemas import StudyQuestRequest, RequestType
 from graph.state import build_state_from_request
 from graph.workflow import get_graph
@@ -124,7 +124,7 @@ def init():
 
     try:
         ensure_database()
-        ensure_tables()
+        run_migrations()
         logger.info("MySQL 数据库已就绪")
     except Exception as e:
         logger.warning(f"MySQL 初始化失败（可能没有运行）: {e}")
