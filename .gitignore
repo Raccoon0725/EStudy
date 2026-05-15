@@ -19,3 +19,8 @@ target/
 
 # 4. 本地敏感配置文件
 .env
+
+# 5. Agent 工作区临时文件
+Agent/workspace/uploads/*
+Agent/workspace/.agent/*
+!Agent/workspace/.gitkeep
