@@ -104,8 +104,15 @@ StudyQuest/
 │
 ├── database/
 │   ├── __init__.py
-│   ├── connection.py             # MySQL 连接池 + 建库建表 DDL
-│   └── repository.py             # CRUD 操作层（7 个实体）
+│   ├── models.py                  # SQLAlchemy ORM 声明式模型（7 个实体 + 关系映射）
+│   ├── connection.py              # MySQL 连接池 + 建库 + Alembic 自动迁移
+│   └── repository.py              # ORM CRUD 操作层（sess.add/get/query.filter）
+│
+├── alembic/                      # 数据库迁移（Alembic）
+│   ├── env.py                    # 迁移环境配置
+│   ├── script.py.mako            # 迁移模板
+│   └── versions/                 # 迁移脚本
+│       └── 001_initial_schema.py # 初始：7 表完整 DDL
 │
 ├── utils/
 │   ├── __init__.py
@@ -238,40 +245,61 @@ dotenv 加载 → 环境变量读取（含默认值，共 29 个常量）
 
 ### 4.3 database — 数据库层
 
-#### connection.py (203 行)
+#### models.py（ORM 声明式模型）
 
-**职责**: MySQL 连接池管理 + 自动建库建表
+**职责**: 7 张表的 SQLAlchemy 声明式 ORM 模型，含完整关系映射
+
+```
+Base = declarative_base()
+
+User ──1:N──> Session ──1:N──> Task
+User ──1:N──> QaLog
+User ──1:N──> Material ──1:N──> MaterialChunk
+User ──1:N──> Report
+Session ──1:N──> Report
+```
+
+所有外键声明 `ondelete=CASCADE` / `SET NULL`，使用 `relationship(back_populates)` 双向关联。ENUM 字段使用 `Enum()` 类型，JSON 字段使用 `JSON` 类型，时间戳使用 `server_default=func.current_timestamp()`。
+
+#### connection.py
+
+**职责**: MySQL 连接池管理 + 自动建库 + Alembic 自动迁移
 
 ```
 Connection Pool: SQLAlchemy engine (pool_size=10, max_overflow=20, pool_recycle=3600)
   ├─ ensure_database()  → CREATE DATABASE IF NOT EXISTS
-  ├─ ensure_tables()    → CREATE TABLE IF NOT EXISTS × 7
-  └─ get_session()      → 上下文管理器（自动 commit/rollback/close）
+  ├─ run_migrations()   → Alembic 自动迁移（基于 models.Base.metadata）
+  │   ├─ 新数据库       → upgrade head（执行全部迁移）
+  │   ├─ 存量数据库     → stamp head（标记已建表，不重复执行）
+  │   └─ 已管理         → upgrade head（仅执行新迁移）
+  └─ get_session()      → 上下文管理器（异常回滚，成功提交）
 ```
 
-#### repository.py (253 行)
+`run_migrations()` 将 ORM 模型的 `Base.metadata` 注入 Alembic，使 `--autogenerate` 能自动对比模型与数据库的差异。
 
-**职责**: 7 个实体的 CRUD 封装
+#### repository.py（ORM CRUD 层）
 
-| 函数 | 操作 | SQL 安全 |
+**职责**: 7 个实体的 ORM CRUD 封装，接口与旧 raw-SQL 版本完全兼容
+
+| 函数 | ORM 操作 | 说明 |
 |---|---|---|
-| `ensure_user()` | INSERT IF NOT EXISTS | ✅ 参数化 |
-| `create_session()` | INSERT | ✅ 参数化 |
-| `get_session_info()` | SELECT | ✅ 参数化 |
-| `insert_task()` | INSERT | ✅ 参数化 |
-| `insert_tasks_batch()` | 循环 INSERT | ✅ 参数化 |
-| `update_task_status()` | UPDATE | ✅ 参数化 (动态列名无注入) |
-| `get_tasks_by_session()` | SELECT | ✅ 参数化 |
-| `get_task()` | SELECT | ✅ 参数化 |
-| `insert_qa_log()` | INSERT | ✅ 参数化 |
-| `get_recent_qa_logs()` | SELECT | ✅ 参数化 |
-| `insert_material()` | INSERT | ✅ 参数化 |
-| `insert_material_chunks()` | 循环 INSERT | ✅ 参数化 |
-| `get_material()` | SELECT | ✅ 参数化 |
-| `get_materials_by_ids()` | SELECT IN | ✅ 参数化 |
-| `insert_report()` | INSERT | ✅ 参数化 |
+| `ensure_user()` | `sess.get(User, id)` → `sess.add()` | 幂等用户保障 |
+| `create_session()` | `sess.add(Session(...))` | 创建学习会话 |
+| `get_session_info()` | `sess.get(Session, id)` | 单会话查询 |
+| `insert_task()` | `sess.add(Task(...))` | 插入关卡 |
+| `insert_tasks_batch()` | 批量 `sess.add()`，单次事务 | 比旧版逐条 INSERT 性能更好 |
+| `update_task_status()` | `sess.get(Task, id)` → 属性修改 | 脏检查自动 UPDATE |
+| `get_tasks_by_session()` | `query.filter().order_by()` | 按 sort_order 排序 |
+| `get_task()` | `sess.get(Task, id)` | 主键查询 |
+| `insert_qa_log()` | `sess.add(QaLog(...))` | 记录答疑 |
+| `get_recent_qa_logs()` | `query.filter(created_at >= ...)` | 按时间范围查询 |
+| `insert_material()` | `sess.add(Material(...))` | 插入资料 |
+| `insert_material_chunks()` | 批量 `sess.add(MaterialChunk(...))` | 单次事务 |
+| `get_material()` | `sess.get(Material, id)` | 单资料查询 |
+| `get_materials_by_ids()` | `query.filter(Material.id.in_([...]))` | 批量查询 |
+| `insert_report()` | `sess.add(Report(...))` | 写入报告 |
 
-全部使用 SQLAlchemy `text()` + 绑定参数，**无 SQL 注入风险**。
+全部使用 SQLAlchemy ORM 的参数绑定，JSON 字段由 SQLAlchemy 自动序列化，**无 SQL 注入风险**。返回值通过 `_to_dict()` 转为 dict，保持与旧接口兼容。
 
 ---
 
@@ -603,7 +631,7 @@ output: "[搜索结果 N] title\nURL\ncontent"
   before_request → 请求日志
   studyquest()   → JSON 解析 → Pydantic 校验 → build_state_from_request()
                    → graph.invoke() → 组装响应 JSON
-  init()         → ensure_directories() + ensure_database() + ensure_tables()
+  init()         → ensure_directories() + ensure_database() + run_migrations()
                    + Qdrant 预热 + LangGraph 编译
 ```
 
@@ -765,6 +793,40 @@ materials (1) ──< material_chunks (N)
 | `material_chunks` | id VARCHAR(64) | material_id, chunk_index, content, qdrant_point_id, embedding_model | idx_material | materials(id) CASCADE |
 | `reports` | id VARCHAR(64) | user_id, session_id, task_id, completion (JSON), weak_points (JSON), recommended_material_ids (JSON), next_tasks_suggestion | idx_user, idx_session, idx_task | users(id) CASCADE, sessions(id) SET NULL, tasks(id) SET NULL |
 
+### 迁移管理（Alembic + ORM autogenerate）
+
+表结构变更通过 **Alembic + SQLAlchemy ORM** 统一管理。`env.py` 注入 `Base.metadata`，使 `--autogenerate` 能够自动对比 ORM 模型定义与实际数据库，生成差异迁移脚本。
+
+**启动时自动执行**：`run_migrations()` 在 `app.py` 和 `main.py` 初始化时调用，按场景决定行为：
+
+| 场景 | 检测条件 | 操作 |
+|------|----------|------|
+| 全新数据库 | 无 `alembic_version` 表，无 `users` 表 | `upgrade head` — 执行全部迁移 |
+| 存量数据库 | 无 `alembic_version` 表，有 `users` 表 | `stamp head` — 标记已建表，不重复执行 |
+| 已受 Alembic 管理 | 有 `alembic_version` 表 | `upgrade head` — 仅执行未应用的迁移 |
+
+**日常使用**：
+
+```bash
+cd Agent
+# 修改 models.py 后（加列/改类型/加索引），自动生成迁移
+python -m alembic revision --autogenerate -m "add user email column"
+
+# 预览 SQL（不实际执行）
+python -m alembic upgrade head --sql
+
+# 应用迁移（代码启动时自动，也可手动）
+python -m alembic upgrade head
+
+# 校验 ORM 模型与数据库一致
+python -m alembic check
+
+# 回滚
+python -m alembic downgrade -1
+```
+
+Alembic 在 `alembic_version` 表中追踪已应用的版本，不会重复执行。新迁移文件放在 `alembic/versions/`，与代码一起提交到 Git。
+
 ---
 
 ## 7. 外部服务依赖
@@ -902,7 +964,7 @@ materials (1) ──< material_chunks (N)
 | 数据库表 | 7 张 |
 | Pydantic 模型 | 12 个 |
 | 文件处理类型 | 14 种扩展名 |
-| 外部依赖 | 25 个 PyPI 包 |
+| 外部依赖 | 26 个 PyPI 包 |
 
 ## 附录 B：启动命令
 
