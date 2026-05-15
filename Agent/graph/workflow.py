@@ -206,6 +206,8 @@ def format_response_node(state: GraphState) -> dict:
             "answer_mode": co.get("answer_mode", ""),
             "sources": co.get("sources", []),
             "confidence": co.get("confidence", "medium"),
+            "qa_log_id": co.get("qa_log_id", ""),
+            "web_search_used": co.get("web_search_used", False),
         }
     elif rt == "review":
         ro = state.get("reviewer_output") or {}
