@@ -12,7 +12,7 @@ public class Session {
     private String id; //这里的ID是Flask生成的字符串，所以不加自动递增
 
     @Column(name = "user_id")
-    private Long userId;
+    private String userId;
 
     @Column(name = "goal_text", columnDefinition = "TEXT")
     private String goalText;
