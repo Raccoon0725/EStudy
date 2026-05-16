@@ -41,7 +41,7 @@ public class StudyQuestController {
                 if (data == null) {
                     flaskResponse.setSuccess(false);
                     flaskResponse.setMessage("AI助手未能在资料库中找到相关内容，请尝试重新上传或更换提问方式");
-                    return flaskResponse; //提前返回，不再往下走逻辑
+                    return flaskResponse; //提前返回，不再往下走
                 }
 
                 String rt = flaskResponse.getRequest_type();
@@ -52,7 +52,6 @@ public class StudyQuestController {
                     Session session = new Session();
                     session.setId(sessionId);
 
-                    //去掉了 Long.valueOf()，直接传 String
                     session.setUserId(request.getUser_id());
                     session.setGoalText(request.getGoal_text());
                     sessionRepository.save(session);
@@ -72,6 +71,7 @@ public class StudyQuestController {
                         }
                     }
                 }
+
                 //如果是答疑请求，把回答存入qa_logs
                 else if ("qa".equals(rt)) {
                     QaLog log = new QaLog();
@@ -82,6 +82,21 @@ public class StudyQuestController {
                     log.setMode((String) data.get("answer_mode"));
                     qaLogRepository.save(log);
                 }
+
+                else if ("chat".equals(rt)) {
+                    //日常闲聊、问候等非结构化文本不需要强行进行多表级联存储。
+                    //现阶段采用高性能“业务透传”，由Java网关直接把Agent吐出的回复转交前端渲染。
+                    //后续若需实现“云端聊天历史记录查看”功能，可在此处扩展ChatLogEntity进行落库。
+                    System.out.println("[网关日志]用户 " + request.getUser_id() + " 发起了一次通用闲聊对话。");
+                }
+
+                else if ("review".equals(rt)) {
+                    //Python端通过后台加权算法算出了完成率、实际用时以及Top3薄弱知识点。
+                    //报告属于即时生成的动态分析结果，直接透传给 Android 端用图表展示，不占用本地 MySQL 空间。
+                    //后续若需要保存“历史报告周报列表”，可在此处扩展 ReportEntity 落地。
+                    System.out.println("[网关日志]成功为用户 " + request.getUser_id() + " 调度并生成阶段复盘诊断报告。");
+                }
+
             }
 
             //把Flask处理完的结果，原样返回给Android前端
