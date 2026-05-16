@@ -19,6 +19,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from agents.base import BaseAgent
 from rag.retriever import get_retriever
 from database.repository import insert_qa_log, get_task
+from tools.web_search import get_web_search_tool
 
 
 class CoachAgent(BaseAgent):
@@ -59,6 +60,7 @@ class CoachAgent(BaseAgent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.rag = get_retriever()
+        self.web_search = get_web_search_tool()
 
     def answer(
         self,
@@ -94,10 +96,25 @@ class CoachAgent(BaseAgent):
                 self.log(f"关卡不存在: {active_task_id}，忽略关卡上下文", "WARN")
                 active_task_id = None  # 防止 FK 约束失败
 
-        # Step 2: RAG 检索相关资料
+        # Step 2: RAG 检索相关资料，无结果时回退到联网搜索
         self.log(f"RAG 检索问题: {question[:100]}")
         rag_docs = self.rag.retrieve(question, user_id, top_k=5)
-        knowledge_context = self.rag.format_retrieved_context(rag_docs)
+
+        web_search_used = False
+        if rag_docs:
+            knowledge_context = self.rag.format_retrieved_context(rag_docs)
+            self.log(f"RAG 找到 {len(rag_docs)} 条相关片段")
+        else:
+            self.log("RAG 无结果，回退到 Tavily 联网搜索")
+            knowledge_context = self.web_search._run(
+                query=f"{question} 知识点 解题方法",
+                max_results=5,
+            )
+            if not knowledge_context.startswith("[WebSearch 不可用]") and not knowledge_context.startswith("[WebSearch 失败]"):
+                web_search_used = True
+                self.log("联网搜索成功")
+            else:
+                self.log(f"联网搜索不可用: {knowledge_context}", "WARN")
 
         # 提取来源信息供返回
         sources = [
@@ -160,6 +177,7 @@ class CoachAgent(BaseAgent):
             "sources": sources,
             "confidence": confidence,
             "qa_log_id": log_id,
+            "web_search_used": web_search_used,
         }
 
     def _auto_detect_mode(
